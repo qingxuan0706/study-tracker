@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>讀書天數計數器｜工數・有機・質均・物化</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts: Noto Sans TC 與 Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- 引入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    },
+                    colors: {
+                        cream: '#FAF9F6',
+                        paper: '#FFFFFF',
+                        ink: '#1E293B',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #F6F5F0;
+            color: #1E293B;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94A3B8;
+        }
+        .card-shadow {
+            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 1px 3px -1px rgba(15, 23, 42, 0.03);
+        }
+        .subject-checkbox:checked + label {
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-slate-800 selection:text-white">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
+                    <i data-lucide="book-open-check" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-tight text-slate-900 leading-none">讀書天數計數器</h1>
+                    <p class="text-[11px] text-slate-500 mt-1 font-medium">工數 ・ 有機 ・ 質均 ・ 物化</p>
+                </div>
+            </div>
+
+            <!-- 備份與設定按鈕組 -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <button onclick="exportData()" title="匯出 JSON 備份" class="p-2 sm:px-3 sm:py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition flex items-center gap-1.5 border border-transparent hover:border-slate-200">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">匯出備份</span>
+                </button>
+                <label title="匯入 JSON 備份" class="cursor-pointer p-2 sm:px-3 sm:py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition flex items-center gap-1.5 border border-transparent hover:border-slate-200">
+                    <i data-lucide="upload" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">匯入</span>
+                    <input type="file" id="importInput" accept=".json" class="hidden" onchange="importData(event)">
+                </label>
+                <button onclick="openResetModal()" title="重置所有資料" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+
+        <!-- 區塊 1：總讀書天數看板 + 每日打卡區 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- 左側：總讀書天數 (佔 5 欄) -->
+            <section class="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-6 sm:p-7 card-shadow flex flex-col justify-between relative overflow-hidden">
+                <!-- 裝飾背景圓圈 -->
+                <div class="absolute -right-10 -top-10 w-44 h-44 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="absolute -left-10 -bottom-10 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-slate-200 border border-white/10">
+                            <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-400"></i>
+                            總計累積（不重複天數）
+                        </span>
+                        <span id="streakBadge" class="text-xs font-medium text-amber-300/90 flex items-center gap-1">
+                            <!-- 連續天數動態填入 -->
+                        </span>
+                    </div>
+
+                    <div class="mt-6 mb-2 flex items-baseline gap-3">
+                        <span id="totalDaysDisplay" class="text-6xl sm:text-7xl font-black tracking-tight tabular-nums">0</span>
+                        <span class="text-xl sm:text-2xl font-bold text-slate-300">天</span>
+                    </div>
+                    <p class="text-xs sm:text-sm text-slate-400 leading-relaxed">
+                        只要當天有讀任何一科即計為 1 天；同一天讀多科不重複計算總天數。
+                    </p>
+                </div>
+
+                <!-- 底部小統計 -->
+                <div class="mt-6 pt-5 border-t border-white/10 grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-[11px] text-slate-400 uppercase tracking-wider">總科次加總</p>
+                        <p class="text-lg font-bold text-white mt-0.5"><span id="totalSubjectSessions">0</span> <span class="text-xs font-normal text-slate-400">科次</span></p>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-400 uppercase tracking-wider">本月已讀天數</p>
+                        <p class="text-lg font-bold text-emerald-400 mt-0.5"><span id="currentMonthDays">0</span> <span class="text-xs font-normal text-slate-400">天</span></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右側：每日打卡與補登區 (佔 7 欄) -->
+            <section class="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 card-shadow border border-slate-200/60 flex flex-col justify-between">
+                <div>
+                    <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                <i data-lucide="calendar-check-2" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h2 class="font-bold text-base sm:text-lg text-slate-900">讀書打卡與補登</h2>
+                                <p class="text-xs text-slate-500">選擇日期並勾選當天有唸的科目</p>
+                            </div>
+                        </div>
+
+                        <!-- 日期選擇器 -->
+                        <div class="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200/80">
+                            <button onclick="shiftCheckinDate(-1)" title="前一天" class="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-white rounded-lg transition">
+                                <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                            </button>
+                            <input type="date" id="checkinDateInput" onchange="loadDateIntoCheckin(this.value)" class="bg-transparent text-xs sm:text-sm font-semibold text-slate-800 px-1 focus:outline-none cursor-pointer">
+                            <button onclick="shiftCheckinDate(1)" title="後一天" class="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-white rounded-lg transition">
+                                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="setCheckinToday()" class="text-xs font-semibold px-2.5 py-1 bg-white text-slate-700 hover:text-slate-900 rounded-lg shadow-xs border border-slate-200/60 transition">
+                                今天
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 狀態提示標籤 -->
+                    <div class="mt-4 flex items-center justify-between">
+                        <span id="selectedDateLabel" class="text-xs font-bold text-slate-700"></span>
+                        <span id="selectedDateStatus" class="text-xs px-2.5 py-0.5 rounded-full font-medium"></span>
+                    </div>
+
+                    <!-- 四科勾選按鈕網格 -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3" id="checkinSubjectGrid">
+                        <!-- 由 JS 動態生成四科勾選卡片 -->
+                    </div>
+                </div>
+
+                <!-- 儲存打卡按鈕 -->
+                <div class="mt-6 flex items-center gap-3">
+                    <button onclick="saveCheckin()" class="flex-1 bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white font-bold py-3 px-5 rounded-2xl shadow-sm transition flex items-center justify-center gap-2 text-sm sm:text-base">
+                        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                        <span>儲存當日讀書紀錄</span>
+                    </button>
+                    <button onclick="clearSelectedDate()" id="clearDateBtn" class="hidden px-4 py-3 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold text-sm transition" title="清除該日紀錄">
+                        清除此日
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- 區塊 2：各科累計天數獨立卡片 -->
+        <section>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="layers" class="w-5 h-5 text-slate-700"></i>
+                        各科累計天數統計
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">點擊「+1 天」可快速將今日計入該科；點擊「-1 天」可移除最近一筆該科紀錄</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="subjectCardsContainer">
+                <!-- 由 JS 動態生成 4 張科目卡片 -->
+            </div>
+        </section>
+
+        <!-- 區塊 3：讀書月曆檢視與歷史紀錄列表 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- 左側：視覺化讀書月曆 (佔 7 欄) -->
+            <section class="lg:col-span-7 bg-white rounded-3xl p-6 card-shadow border border-slate-200/60">
+                <div class="flex items-center justify-between mb-5">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                            <i data-lucide="calendar" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-base text-slate-900">讀書軌跡月曆</h2>
+                            <p class="text-xs text-slate-500">點擊任意日期可直接載入上方修改</p>
+                        </div>
+                    </div>
+
+                    <!-- 月份切換 -->
+                    <div class="flex items-center gap-2">
+                        <button onclick="changeCalendarMonth(-1)" class="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <span id="calendarMonthTitle" class="text-sm font-bold text-slate-800 min-w-[96px] text-center"></span>
+                        <button onclick="changeCalendarMonth(1)" class="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 星期標頭 -->
+                <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-400 mb-2">
+                    <div class="text-rose-400">日</div>
+                    <div>一</div>
+                    <div>二</div>
+                    <div>三</div>
+                    <div>四</div>
+                    <div>五</div>
+                    <div class="text-blue-400">六</div>
+                </div>
+
+                <!-- 日曆格子 -->
+                <div id="calendarGrid" class="grid grid-cols-7 gap-1.5">
+                    <!-- 由 JS 生成 -->
+                </div>
+
+                <!-- 圖例說明 -->
+                <div class="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>工數</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>有機</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>質均</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>物化</span>
+                    </div>
+                    <span>彩色圓點代表當日進度</span>
+                </div>
+            </section>
+
+            <!-- 右側：近期讀書紀錄列表 (佔 5 欄) -->
+            <section class="lg:col-span-5 bg-white rounded-3xl p-6 card-shadow border border-slate-200/60 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                            <i data-lucide="history" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-base text-slate-900">歷史讀書紀錄</h2>
+                            <p class="text-xs text-slate-500">依日期由新到舊排列</p>
+                        </div>
+                    </div>
+                    <span id="historyCountBadge" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">0 筆</span>
+                </div>
+
+                <!-- 紀錄滾動區 -->
+                <div id="historyList" class="flex-1 overflow-y-auto max-h-[340px] space-y-2.5 pr-1">
+                    <!-- 由 JS 動態生成 -->
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 text-center text-xs text-slate-400">
+        所有資料皆自動安全儲存在您的瀏覽器本機中（LocalStorage），建議定期匯出 JSON 備份。
+    </footer>
+
+    <!-- Toast 提示訊息容器 -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- 自訂確認對話框 (取代 confirm()) -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 transform transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <h3 id="modalTitle" class="text-lg font-bold text-slate-900">確定要重置所有資料嗎？</h3>
+            <p id="modalDesc" class="text-sm text-slate-500 mt-1.5 leading-relaxed">
+                這將會清除所有的讀書天數與歷史打卡紀錄，且無法復原。建議先匯出備份再執行。
+            </p>
+            <div class="mt-6 flex items-center gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition">
+                    取消
+                </button>
+                <button id="modalConfirmBtn" class="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm transition">
+                    確定執行
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 科目與系統常數設定
+        // ==========================================
+        const SUBJECTS = [
+            {
+                id: 'eng_math',
+                name: '工數',
+                fullName: '工程數學',
+                icon: 'sigma',
+                colorName: 'blue',
+                bgLight: 'bg-blue-50',
+                bgBadge: 'bg-blue-100 text-blue-700 border-blue-200',
+                bgSolid: 'bg-blue-600',
+                hoverSolid: 'hover:bg-blue-700',
+                textMain: 'text-blue-600',
+                borderActive: 'border-blue-500 bg-blue-50/70',
+                dotColor: 'bg-blue-500',
+                ringColor: 'ring-blue-500/20'
+            },
+            {
+                id: 'organic',
+                name: '有機',
+                fullName: '有機化學',
+                icon: 'hexagon',
+                colorName: 'emerald',
+                bgLight: 'bg-emerald-50',
+                bgBadge: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                bgSolid: 'bg-emerald-600',
+                hoverSolid: 'hover:bg-emerald-700',
+                textMain: 'text-emerald-600',
+                borderActive: 'border-emerald-500 bg-emerald-50/70',
+                dotColor: 'bg-emerald-500',
+                ringColor: 'ring-emerald-500/20'
+            },
+            {
+                id: 'mass_energy',
+                name: '質均',
+                fullName: '質量與能量均衡',
+                icon: 'scale',
+                colorName: 'orange',
+                bgLight: 'bg-orange-50',
+                bgBadge: 'bg-orange-100 text-orange-700 border-orange-200',
+                bgSolid: 'bg-orange-500',
+                hoverSolid: 'hover:bg-orange-600',
+                textMain: 'text-orange-600',
+                borderActive: 'border-orange-500 bg-orange-50/70',
+                dotColor: 'bg-orange-500',
+                ringColor: 'ring-orange-500/20'
+            },
+            {
+                id: 'p_chem',
+                name: '物化',
+                fullName: '物理化學',
+                icon: 'atom',
+                colorName: 'purple',
+                bgLight: 'bg-purple-50',
+                bgBadge: 'bg-purple-100 text-purple-700 border-purple-200',
+                bgSolid: 'bg-purple-600',
+                hoverSolid: 'hover:bg-purple-700',
+                textMain: 'text-purple-600',
+                borderActive: 'border-purple-500 bg-purple-50/70',
+                dotColor: 'bg-purple-500',
+                ringColor: 'ring-purple-500/20'
+            }
+        ];
+
+        const STORAGE_KEY = 'chem_study_tracker_v1';
+
+        // 資料結構：{ records: { "YYYY-MM-DD": ["eng_math", "organic"] } }
+        let appState = {
+            records: {}
+        };
+
+        // 目前打卡區選擇的日期 (YYYY-MM-DD)
+        let selectedDate = getTodayStr();
+        // 目前打卡區暫存勾選的科目 Set
+        let tempCheckedSubjects = new Set();
+        // 日曆目前檢視的年月
+        let calYear = new Date().getFullYear();
+        let calMonth = new Date().getMonth(); // 0-11
+
+        // ==========================================
+        // 2. 日期輔助工具函式
+        // ==========================================
+        function getTodayStr() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function formatDateChinese(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+            const w = weekdays[dateObj.getDay()];
+            const isToday = dateStr === getTodayStr();
+            return `${y} 年 ${m} 月 ${d} 日 (週${w})${isToday ? '・今天' : ''}`;
+        }
+
+        function addDaysToDateStr(dateStr, delta) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            dateObj.setDate(dateObj.getDate() + delta);
+            const ny = dateObj.getFullYear();
+            const nm = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const nd = String(dateObj.getDate()).padStart(2, '0');
+            return `${ny}-${nm}-${nd}`;
+        }
+
+        // ==========================================
+        // 3. 資料儲存與讀取 (LocalStorage)
+        // ==========================================
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed.records === 'object') {
+                        appState.records = parsed.records;
+                    }
+                }
+            } catch (e) {
+                console.error('讀取本機資料失敗:', e);
+            }
+        }
+
+        function saveState() {
+            try {
+                // 清理空陣列的日期，確保總天數只計算有效打卡日
+                for (const dateKey in appState.records) {
+                    if (!Array.isArray(appState.records[dateKey]) || appState.records[dateKey].length === 0) {
+                        delete appState.records[dateKey];
+                    }
+                }
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                showToast('儲存資料失敗，請檢查瀏覽器儲存空間', 'error');
+            }
+        }
+
+        // ==========================================
+        // 4. 統計數據計算
+        // ==========================================
+        function calculateStats() {
+            const dates = Object.keys(appState.records).filter(d => appState.records[d].length > 0);
+            const totalDays = dates.length;
+
+            // 各科累計天數
+            const subjectCounts = {};
+            SUBJECTS.forEach(s => subjectCounts[s.id] = 0);
+
+            let totalSessions = 0;
+            const now = new Date();
+            const currentPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            let currentMonthDays = 0;
+
+            dates.forEach(dateStr => {
+                if (dateStr.startsWith(currentPrefix)) {
+                    currentMonthDays++;
+                }
+                const subs = appState.records[dateStr];
+                subs.forEach(subId => {
+                    if (subjectCounts[subId] !== undefined) {
+                        subjectCounts[subId]++;
+                        totalSessions++;
+                    }
+                });
+            });
+
+            // 計算目前連續讀書天數 (從今天或昨天往回推)
+            let streak = 0;
+            const today = getTodayStr();
+            const yesterday = addDaysToDateStr(today, -1);
+            let checkCursor = appState.records[today]?.length > 0 ? today : (appState.records[yesterday]?.length > 0 ? yesterday : null);
+
+            while (checkCursor && appState.records[checkCursor]?.length > 0) {
+                streak++;
+                checkCursor = addDaysToDateStr(checkCursor, -1);
+            }
+
+            return {
+                totalDays,
+                subjectCounts,
+                totalSessions,
+                currentMonthDays,
+                streak,
+                sortedDates: dates.sort((a, b) => b.localeCompare(a)) // 由新到舊
+            };
+        }
+
+        // ==========================================
+        // 5. 介面渲染邏輯
+        // ==========================================
+        function renderAll() {
+            const stats = calculateStats();
+            renderOverview(stats);
+            renderCheckinSection();
+            renderSubjectCards(stats);
+            renderCalendar();
+            renderHistoryList(stats);
+            lucide.createIcons();
+        }
+
+        // 渲染總覽看板
+        function renderOverview(stats) {
+            document.getElementById('totalDaysDisplay').textContent = stats.totalDays;
+            document.getElementById('totalSubjectSessions').textContent = stats.totalSessions;
+            document.getElementById('currentMonthDays').textContent = stats.currentMonthDays;
+
+            const streakEl = document.getElementById('streakBadge');
+            if (stats.streak > 0) {
+                streakEl.innerHTML = `<i data-lucide="zap" class="w-3.5 h-3.5"></i> 連續 ${stats.streak} 天`;
+            } else {
+                streakEl.innerHTML = `今日尚未打卡`;
+            }
+        }
+
+        // 渲染打卡區
+        function renderCheckinSection() {
+            const dateInput = document.getElementById('checkinDateInput');
+            dateInput.value = selectedDate;
+
+            document.getElementById('selectedDateLabel').textContent = formatDateChinese(selectedDate);
+
+            const existing = appState.records[selectedDate] || [];
+            const statusEl = document.getElementById('selectedDateStatus');
+            const clearBtn = document.getElementById('clearDateBtn');
+
+            if (existing.length > 0) {
+                statusEl.textContent = `已紀錄 ${existing.length} 科`;
+                statusEl.className = 'text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-700';
+                clearBtn.classList.remove('hidden');
+            } else {
+                statusEl.textContent = '尚未有紀錄';
+                statusEl.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500';
+                clearBtn.classList.add('hidden');
+            }
+
+            const grid = document.getElementById('checkinSubjectGrid');
+            grid.innerHTML = SUBJECTS.map(sub => {
+                const isChecked = tempCheckedSubjects.has(sub.id);
+                return `
+                    <button type="button" onclick="toggleTempSubject('${sub.id}')"
+                        class="group relative flex flex-col items-center justify-center p-3.5 sm:p-4 rounded-2xl border-2 transition-all duration-150 cursor-pointer select-none
+                        ${isChecked 
+                            ? `${sub.borderActive} ring-4 ${sub.ringColor} shadow-xs` 
+                            : 'border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/50'}">
+                        
+                        <!-- 右上角勾選指示器 -->
+                        <div class="absolute top-2.5 right-2.5 w-5 h-5 rounded-full flex items-center justify-center transition-colors
+                            ${isChecked ? `${sub.bgSolid} text-white` : 'border border-slate-300 bg-slate-50 text-transparent'}">
+                            <i data-lucide="check" class="w-3 h-3 stroke-[3]"></i>
+                        </div>
+
+                        <div class="w-10 h-10 rounded-xl ${sub.bgLight} ${sub.textMain} flex items-center justify-center mb-2 transition-transform group-hover:scale-105">
+                            <i data-lucide="${sub.icon}" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-bold text-sm sm:text-base text-slate-900">${sub.name}</span>
+                        <span class="text-[11px] text-slate-400 mt-0.5">${sub.fullName}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        // 渲染四張獨立科目卡片
+        function renderSubjectCards(stats) {
+            const container = document.getElementById('subjectCardsContainer');
+            const today = getTodayStr();
+            const todaySubs = appState.records[today] || [];
+
+            container.innerHTML = SUBJECTS.map(sub => {
+                const count = stats.subjectCounts[sub.id] || 0;
+                // 佔總讀書天數的比例 (若總天數為0則為0%)
+                const ratio = stats.totalDays > 0 ? Math.round((count / stats.totalDays) * 100) : 0;
+                const doneToday = todaySubs.includes(sub.id);
+
+                return `
+                    <div class="bg-white rounded-3xl p-5 card-shadow border border-slate-200/60 flex flex-col justify-between transition hover:border-slate-300">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-10 h-10 rounded-2xl ${sub.bgLight} ${sub.textMain} flex items-center justify-center">
+                                        <i data-lucide="${sub.icon}" class="w-5 h-5"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-base text-slate-900">${sub.name}</h3>
+                                        <p class="text-[11px] text-slate-400">${sub.fullName}</p>
+                                    </div>
+                                </div>
+                                ${doneToday 
+                                    ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${sub.bgBadge} border">今日已讀</span>` 
+                                    : `<span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">今日未讀</span>`
+                                }
+                            </div>
+
+                            <!-- 累計天數大數字 -->
+                            <div class="mt-5 flex items-baseline justify-between">
+                                <div class="flex items-baseline gap-1.5">
+                                    <span class="text-4xl font-black text-slate-900 tabular-nums">${count}</span>
+                                    <span class="text-sm font-semibold text-slate-500">天</span>
+                                </div>
+                                <span class="text-xs font-semibold ${sub.textMain}">出勤率 ${ratio}%</span>
+                            </div>
+
+                            <!-- 進度條 -->
+                            <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mt-2.5">
+                                <div class="h-full ${sub.bgSolid} rounded-full transition-all duration-500" style="width: ${ratio}%"></div>
+                            </div>
+                        </div>
+
+                        <!-- 快捷 +1 / -1 按鈕 -->
+                        <div class="mt-5 pt-4 border-t border-slate-100 flex items-center gap-2">
+                            <button onclick="quickAddSubjectToday('${sub.id}')" 
+                                class="flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white ${sub.bgSolid} ${sub.hoverSolid} active:scale-[0.98] transition flex items-center justify-center gap-1 shadow-xs">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                <span>${doneToday ? '今日已計入' : '+1 天 (今日)'}</span>
+                            </button>
+                            <button onclick="quickDecrementSubject('${sub.id}')" title="減少 1 天（移除最近一筆該科紀錄）"
+                                class="py-2 px-2.5 rounded-xl font-semibold text-xs text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition flex items-center justify-center">
+                                -1
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 渲染視覺化月曆
+        function renderCalendar() {
+            document.getElementById('calendarMonthTitle').textContent = `${calYear} 年 ${calMonth + 1} 月`;
+
+            const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay(); // 0 (日) - 6 (六)
+            const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+            const todayStr = getTodayStr();
+
+            let html = '';
+
+            // 補齊月初空白格
+            for (let i = 0; i < firstDayOfWeek; i++) {
+                html += `<div class="aspect-square rounded-xl bg-slate-50/50"></div>`;
+            }
+
+            // 填入每一天
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const subs = appState.records[dateStr] || [];
+                const hasStudied = subs.length > 0;
+                const isSelected = dateStr === selectedDate;
+                const isToday = dateStr === todayStr;
+
+                // 產生該日科目小圓點
+                const dotsHtml = SUBJECTS.map(s => {
+                    if (subs.includes(s.id)) {
+                        return `<span class="w-1.5 h-1.5 rounded-full ${s.dotColor}"></span>`;
+                    }
+                    return '';
+                }).join('');
+
+                html += `
+                    <button onclick="selectDateFromCalendar('${dateStr}')"
+                        class="aspect-square rounded-xl p-1 flex flex-col items-center justify-between border transition relative
+                        ${isSelected 
+                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm' 
+                            : hasStudied 
+                                ? 'border-slate-200 bg-amber-50/40 hover:border-slate-400 text-slate-900' 
+                                : 'border-transparent hover:bg-slate-100 text-slate-600'}">
+                        
+                        <span class="text-xs sm:text-sm font-bold leading-none mt-1 ${isToday && !isSelected ? 'text-blue-600 underline decoration-2 underline-offset-2' : ''}">
+                            ${day}
+                        </span>
+
+                        <div class="flex items-center justify-center gap-0.5 mb-1 h-2">
+                            ${dotsHtml}
+                        </div>
+                    </button>
+                `;
+            }
+
+            document.getElementById('calendarGrid').innerHTML = html;
+        }
+
+        // 渲染歷史紀錄列表
+        function renderHistoryList(stats) {
+            const listEl = document.getElementById('historyList');
+            const badgeEl = document.getElementById('historyCountBadge');
+            badgeEl.textContent = `共 ${stats.sortedDates.length} 天`;
+
+            if (stats.sortedDates.length === 0) {
+                listEl.innerHTML = `
+                    <div class="h-48 flex flex-col items-center justify-center text-center p-4 border-2 border-dashed border-slate-200 rounded-2xl">
+                        <i data-lucide="book-open" class="w-8 h-8 text-slate-300 mb-2"></i>
+                        <p class="text-sm font-semibold text-slate-500">尚無任何讀書紀錄</p>
+                        <p class="text-xs text-slate-400 mt-1">在上方勾選科目並儲存，開始累積你的讀書天數！</p>
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = stats.sortedDates.map(dateStr => {
+                const subIds = appState.records[dateStr];
+                const isSelected = dateStr === selectedDate;
+                const badges = SUBJECTS
+                    .filter(s => subIds.includes(s.id))
+                    .map(s => `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md border ${s.bgBadge}">${s.name}</span>`)
+                    .join('');
+
+                return `
+                    <div onclick="selectDateFromCalendar('${dateStr}')"
+                        class="p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between gap-2
+                        ${isSelected ? 'border-slate-900 bg-slate-50' : 'border-slate-100 hover:border-slate-300 bg-white'}">
+                        <div>
+                            <div class="text-xs font-bold text-slate-800">${formatDateChinese(dateStr)}</div>
+                            <div class="flex flex-wrap gap-1.5 mt-1.5">
+                                ${badges}
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); deleteSingleHistoryDate('${dateStr}')" title="刪除此日紀錄"
+                            class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ==========================================
+        // 6. 互動操作函式
+        // ==========================================
+        function loadDateIntoCheckin(dateStr) {
+            if (!dateStr) return;
+            selectedDate = dateStr;
+            const existing = appState.records[selectedDate] || [];
+            tempCheckedSubjects = new Set(existing);
+
+            // 同步更新月曆視角到該月份
+            const [y, m] = dateStr.split('-').map(Number);
+            calYear = y;
+            calMonth = m - 1;
+
+            renderAll();
+        }
+
+        function shiftCheckinDate(delta) {
+            const nextDate = addDaysToDateStr(selectedDate, delta);
+            loadDateIntoCheckin(nextDate);
+        }
+
+        function setCheckinToday() {
+            loadDateIntoCheckin(getTodayStr());
+        }
+
+        function selectDateFromCalendar(dateStr) {
+            loadDateIntoCheckin(dateStr);
+            // 在手機版點擊日曆或歷史紀錄時，平滑捲動到打卡區方便編輯
+            if (window.innerWidth < 1024) {
+                document.getElementById('checkinDateInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function toggleTempSubject(subId) {
+            if (tempCheckedSubjects.has(subId)) {
+                tempCheckedSubjects.delete(subId);
+            } else {
+                tempCheckedSubjects.add(subId);
+            }
+            renderCheckinSection();
+            lucide.createIcons();
+        }
+
+        function saveCheckin() {
+            const selectedArray = Array.from(tempCheckedSubjects);
+            if (selectedArray.length === 0) {
+                // 若全部取消勾選並按下儲存，視同清除該日
+                delete appState.records[selectedDate];
+                saveState();
+                renderAll();
+                showToast(`已清除 ${selectedDate} 的讀書紀錄`, 'info');
+                return;
+            }
+
+            // 依照固定順序排列科目
+            const orderedArray = SUBJECTS.map(s => s.id).filter(id => selectedArray.includes(id));
+            appState.records[selectedDate] = orderedArray;
+            saveState();
+            renderAll();
+            showToast(`已成功儲存 ${selectedDate} 的讀書紀錄！`, 'success');
+        }
+
+        function clearSelectedDate() {
+            delete appState.records[selectedDate];
+            tempCheckedSubjects.clear();
+            saveState();
+            renderAll();
+            showToast(`已清除 ${selectedDate} 的紀錄`, 'info');
+        }
+
+        function deleteSingleHistoryDate(dateStr) {
+            delete appState.records[dateStr];
+            if (selectedDate === dateStr) {
+                tempCheckedSubjects.clear();
+            }
+            saveState();
+            renderAll();
+            showToast(`已刪除 ${dateStr} 的紀錄`, 'info');
+        }
+
+        // 各科卡片快捷「+1 天 (今日)」
+        function quickAddSubjectToday(subId) {
+            const today = getTodayStr();
+            const currentTodaySubs = new Set(appState.records[today] || []);
+            const subObj = SUBJECTS.find(s => s.id === subId);
+
+            if (currentTodaySubs.has(subId)) {
+                showToast(`今天已經有打卡「${subObj.name}」囉！如需補登其他天請使用上方日期選擇器。`, 'info');
+                return;
+            }
+
+            currentTodaySubs.add(subId);
+            appState.records[today] = SUBJECTS.map(s => s.id).filter(id => currentTodaySubs.has(id));
+
+            // 若目前打卡區停留在今天，同步更新勾選狀態
+            if (selectedDate === today) {
+                tempCheckedSubjects = new Set(appState.records[today]);
+            }
+
+            saveState();
+            renderAll();
+            showToast(`今日已打卡「${subObj.name}」+1 天！`, 'success');
+        }
+
+        // 各科卡片快捷「-1 天」(從最新的一筆該科紀錄中移除)
+        function quickDecrementSubject(subId) {
+            const subObj = SUBJECTS.find(s => s.id === subId);
+            const sortedDates = Object.keys(appState.records).sort((a, b) => b.localeCompare(a));
+
+            for (const dateStr of sortedDates) {
+                const idx = appState.records[dateStr].indexOf(subId);
+                if (idx !== -1) {
+                    appState.records[dateStr].splice(idx, 1);
+                    if (appState.records[dateStr].length === 0) {
+                        delete appState.records[dateStr];
+                    }
+                    if (selectedDate === dateStr) {
+                        tempCheckedSubjects = new Set(appState.records[dateStr] || []);
+                    }
+                    saveState();
+                    renderAll();
+                    showToast(`已從 ${dateStr} 移除「${subObj.name}」(-1 天)`, 'info');
+                    return;
+                }
+            }
+
+            showToast(`「${subObj.name}」目前累計為 0 天，無法再減少`, 'error');
+        }
+
+        function changeCalendarMonth(delta) {
+            calMonth += delta;
+            if (calMonth > 11) {
+                calMonth = 0;
+                calYear++;
+            } else if (calMonth < 0) {
+                calMonth = 11;
+                calYear--;
+            }
+            renderCalendar();
+        }
+
+        // ==========================================
+        // 7. 匯出 / 匯入 / 重置功能
+        // ==========================================
+        function exportData() {
+            const dataStr = JSON.stringify(appState, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `讀書天數備份_${getTodayStr()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('已匯出 JSON 備份檔案！', 'success');
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed && typeof parsed.records === 'object') {
+                        appState.records = parsed.records;
+                        saveState();
+                        loadDateIntoCheckin(selectedDate);
+                        showToast('備份資料匯入成功！', 'success');
+                    } else {
+                        showToast('檔案格式不正確，請選擇有效的備份 JSON 檔', 'error');
+                    }
+                } catch (err) {
+                    showToast('讀取檔案失敗，JSON 格式錯誤', 'error');
+                }
+                event.target.value = ''; // 重置 input 允許重複選同檔案
+            };
+            reader.readAsText(file);
+        }
+
+        function openResetModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('modalConfirmBtn').onclick = function() {
+                appState.records = {};
+                tempCheckedSubjects.clear();
+                saveState();
+                renderAll();
+                closeConfirmModal();
+                showToast('已重置所有讀書紀錄', 'info');
+            };
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // ==========================================
+        // 8. Toast 訊息通知系統
+        // ==========================================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+
+            let bgClass = 'bg-slate-900 text-white';
+            let iconName = 'info';
+            if (type === 'success') {
+                bgClass = 'bg-emerald-600 text-white';
+                iconName = 'check-circle';
+            } else if (type === 'error') {
+                bgClass = 'bg-rose-600 text-white';
+                iconName = 'alert-circle';
+            }
+
+            toast.className = `${bgClass} px-4 py-3 rounded-2xl shadow-lg text-xs sm:text-sm font-semibold flex items-center gap-2.5 transform transition-all duration-300 translate-y-2 opacity-0 pointer-events-auto max-w-xs sm:max-w-sm`;
+            toast.innerHTML = `
+                <i data-lucide="${iconName}" class="w-4 h-4 shrink-0"></i>
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 2800);
+        }
+
+        // ==========================================
+        // 9. 初始化啟動
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            loadDateIntoCheckin(getTodayStr());
+        });
+    </script>
+</body>
+</html>
